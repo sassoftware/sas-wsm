@@ -24,7 +24,7 @@ Download script and store in a location where it can be accessed. Open the scrip
 2) Define SAS services to start. In the function Start-SAS, set a list of Windows Services you wish to control, following the tag #DEFINE-VARIABLE.
 3) Define the location of the SAS Configuration Directory. In the function Check-WebAppServer-Ready, set this location on the line tagged #DEFINE-VARIABLE.
 
-Detailed setup documentation will be provided in a future release.
+Detailed setup documentation is provided in the file **SAS-wsmConfigurationGuide.pdf**.
 
 ### Running
 
