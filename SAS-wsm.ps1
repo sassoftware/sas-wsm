@@ -2,10 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SAS-wsm: Script to Start/Stop Windows Services and validate MidTier Readiness
-# Version: 1.0.0
+# Version: 1.0.1
 # Author: Andy Foreman
-# Date: 16MAY2022
 # Much of the baseline code derived from previous work by Greg Wootton on 20AUG2020
+####
+# Revision History
+# 1.0.0 - 16 May 2022
+# 1.0.1 - 22 August 2022. Add check on null arrays during webappserver log reading due to rolled logs.
 
 
 # Get server name and action as arguments
@@ -161,15 +164,32 @@ Do {
 
 #pull a list of line numbers from the WebAppServer's server log, matching string indicating server stop operation, then keep only the last member of the list (the latest matching line number)
 $laststop = Select-String -Path "$sasconfigpath\Web\WebAppServer\$webappsvrname\logs\server.log" -Pattern 'Stopping service \[Catalina\]' | select-object -ExpandProperty LineNumber
-$laststop = $laststop[-1]
+if ($null -eq $laststop) {
+	#Enter here if we did not find any matches on the Pattern search, which can happen if the log file is new or rolled.
+	#In this instance, just consider the last action as line 0 for logic. lastinit should always be line 1 in this case. This prevents assigning on null arrays.
+	$laststop=0
+}
+else {
+	$laststop = $laststop[-1]
+}
 
 #same as laststop but for initialization message (printed when the server starts loading its webapps)
 $lastinit = Select-String -Path "$sasconfigpath\Web\WebAppServer\$webappsvrname\logs\server.log" -Pattern 'Initialization processed' | select-object -ExpandProperty LineNumber
-$lastinit = $lastinit[-1]
+if ($null -eq $lastinit) {
+	$lastinit=0
+}
+else {
+	$lastinit = $lastinit[-1]
+}
 
 #same as laststop but for startup message (printed when the server has finished loading all webapps)
 $laststart = Select-String -Path "$sasconfigpath\Web\WebAppServer\$webappsvrname\logs\server.log" -Pattern 'Server startup' | select-object -ExpandProperty LineNumber
-$laststart = $laststart[-1]
+if ($null -eq $laststart) {
+	$laststart=0
+}
+else {
+	$laststart = $laststart[-1]
+}
 
 if ($laststop -gt $lastinit){
 	#if newest thing in log is stop, there was a problem
