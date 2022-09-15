@@ -2,41 +2,32 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SAS-wsm: Script to Start/Stop Windows Services and validate MidTier Readiness
-# Version: 1.0.1
+# Version: 1.1.0
 # Author: Andy Foreman
 # Much of the baseline code derived from previous work by Greg Wootton on 20AUG2020
 ####
 # Revision History
 # 1.0.0 - 16 May 2022
 # 1.0.1 - 22 August 2022. Add check on null arrays during webappserver log reading due to rolled logs.
+# 1.1.0 - 15 September 2022. Change to external cfg file for service definitions. Add search, input checking and validation functions. Code revisions to support cfg file, etc.
 
+# Get action and config file as arguments
+param($action, $cfg)
 
-# Get server name and action as arguments
-param($servername,$action)
+######## USER-DEFINED VARIABLES ########
+
+# SAS Configuration Directory folder path, including Lev#, in quotes.
+# $sasconfigpath="C:\SAS\Config\Lev1\"
+$sasconfigpath = "C:\SAS\SASConfig\Lev1\"
+
+##### DO NOT EDIT BELOW THIS LINE ######
 
 # Define a Stop SAS function to stop sas services in order. This list can be augmented, just be sure the order is correct.
 function Stop-SAS {
-
     Get-SAS
-	#DEFINE-VARIABLE
-    "SAS Deployment Agent",
-    "SAS [Config-Lev1] SAS Environment Manager Agent",
-    "SAS [Config-Lev1] SAS Environment Manager",
-    "SAS [config-Lev1] Information Retrieval Studio",
-    "SAS [Config-Lev1] SASServer12_1 - WebAppServer",
-    "SAS [Config-Lev1] SASServer2_1 - WebAppServer",
-    "SAS [Config-Lev1] SASServer1_1 - WebAppServer",
-    "SAS[Config-Lev1]httpd-WebServer", #httpd/Web Server intentionally missing spaces, Windows will not detect it otherwise
-    "SAS [Config-Lev1] httpd - WebServer",
-    "SAS [Config-Lev1] Cache Locator on port 41415",
-    "SAS [Config-Lev1] JMS Broker on port 61616",
-    "SAS [Config-Lev1] DIP JobRunner",
-    "SAS [Config-Lev1] Deployment Tester Server",
-    "SAS [Config-Lev1] Object Spawner",
-    "SAS [Config-Lev1] SASApp - OLAP Server",
-    "SAS [Config-Lev1] Remote Services",
-    "SAS [Config-Lev1] Web Infrastructure Platform Data Server",
-    "SAS [Config-Lev1] SASMeta - Metadata Server" | ForEach-Object {
+	$stoparray = Get-Content -Path $cfg
+	[array]::Reverse($stoparray) #user cfg file has services in start order, so reverse it
+	$stoparray | ForEach-Object {
 
         # Check if the service is running
         $service=Get-WMIObject -Class Win32_Service -filter "Name = '$_' AND State != 'Stopped'"
@@ -56,7 +47,7 @@ function Stop-SAS {
             else {
                 Write-Host "ERROR: Failed to stop $_. Stop command returned a non-zero code. Return code: " $status.ReturnValue
                 Write-Host "NOTE: Here is the current state of services."
-                Get-WMIObject -Class Win32_Service -filter "Name LIKE 'SAS%' OR DisplayName LIKE 'IBM%'" | Format-Table -Property DisplayName,State,StartMode
+                Get-SAS
                 exit
             }
             # Wait until it's stopped successfully before moving on (or until 30 seconds have elapsed).
@@ -79,25 +70,8 @@ function Stop-SAS {
 
 function Start-SAS {
 Get-SAS
-	#DEFINE-VARIABLE
-    "SAS [Config-Lev1] SASMeta - Metadata Server",
-    "SAS [Config-Lev1] Web Infrastructure Platform Data Server",
-	"SAS [Config-Lev1] Remote Services",
-	"SAS [Config-Lev1] SASApp - OLAP Server",
-	"SAS [Config-Lev1] Object Spawner",
-    "SAS [Config-Lev1] Deployment Tester Server",
-	"SAS [Config-Lev1] DIP JobRunner",
-    "SAS [Config-Lev1] JMS Broker on port 61616",
-	"SAS [Config-Lev1] Cache Locator on port 41415",
-	"SAS[Config-Lev1]httpd-WebServer",
-	"SAS [Config-Lev1] httpd - WebServer",
-	"SAS [Config-Lev1] SASServer1_1 - WebAppServer",
-	"SAS [Config-Lev1] SASServer2_1 - WebAppServer",
-	"SAS [Config-Lev1] SASServer12_1 - WebAppServer",
-	"SAS [config-Lev1] Information Retrieval Studio",
-	"SAS [Config-Lev1] SAS Environment Manager",
-	"SAS [Config-Lev1] SAS Environment Manager Agent",
-	"SAS Deployment Agent" | ForEach-Object {
+$startarray = Get-Content -Path $cfg	
+$startarray | ForEach-Object {
 
         # Check if the service is stopped
         $service=Get-WMIObject -Class Win32_Service -filter "Name = '$_' AND State != 'Running'"
@@ -115,7 +89,7 @@ Get-SAS
             }
             else {
                 Write-Host "ERROR: Start command for  $_ gave a non-zero return code. Exiting. Return code: " $status.ReturnValue
-                Get-WMIObject -Class Win32_Service -filter "Name LIKE 'SAS%' OR DisplayName LIKE 'IBM%'" | Format-Table -Property DisplayName,State,StartMode
+                Get-SAS
                 exit
             }
             # Wait until it's stopped successfully before moving on (or until 30 seconds have elapsed).
@@ -140,18 +114,98 @@ Get-SAS
 }
 
 function Get-SAS {
+    $statusarray = Get-Content -Path $cfg
+	Write-Host ""
+    Write-Host "Current services status:"
+	#Use array contents as WHERE so that we only need to make one Get-WmiObject call, to allow the Format-Table creation of an easy-to-read table.
+	#Inspired by https://social.technet.microsoft.com/Forums/en-US/43b1f971-e1ad-44ae-a98a-8667248a0fde/getwmiobject-win32service-for-a-list-of-services?forum=winserverpowershell
+	#Only issue with this method is that we don't seem to be able to control the order of services listed in the output... it operates the same way Search-SAS-IBM does,
+	#it would be nice if we could display in the user-defined order instead.
+	Get-WmiObject Win32_Service | Where { ($statusarray) -Contains $_.Name} | Format-Table DisplayName, State
+	
+	#original method for checking service status is retained below
+	#this method works and displays in user-defined order, but produces a "new" table for each entry as we iteratively call Get-WMIObject. Hard to read.
+	#$statusarray | ForEach-Object {
+	#	Get-WMIObject -Class Win32_Service -filter "Name = '$_'" | Format-Table -HideTableHeaders -Property DisplayName,State
+	#}
+}
+
+function Search-SAS-IBM {
     Write-Host ""
-    Write-Host "Here are the SAS and IBM Services present:"
+    Write-Host "Here are all the SAS and IBM Services present:"
     
     # Get a list of services and their status
     Get-WMIObject -Class Win32_Service -filter "Name LIKE 'SAS%' OR DisplayName LIKE 'IBM%'" | Format-Table -Property DisplayName,State,StartMode
     
 }
 
+function Check-Input {
+    Write-Host ""
+	#make sure sas config dir exists
+	if (Test-Path -Path $sasconfigpath) {
+		Write-Host "Using SAS Configuation Directory path $sasconfigpath."
+    } else {
+		Write-Host "ERROR: Unable to access SAS Configuration Directory at path $sasconfigpath."
+		Write-Host "Ensure the defined SAS Configuration Directory inside SAS-wsm.ps1 is correct."
+		Write-Host "Exiting..."
+		exit
+    }
+	#make sure user cfg file contains something that is probably SAS services (this is a loose determination at best)
+	if ($cfg.Length -gt 0) {
+		if (Select-String -SimpleMatch -Path $cfg -Pattern "SAS [") {
+			Write-Host "Using input configuration file $cfg."
+		} else {
+			Write-Host "ERROR: Unable to determine if any SAS services are defined in configuration file $cfg."
+			Write-Host "Verify the contents of this file is accurate using the -action validate flag."
+			Write-Host "Exiting..."
+			exit
+		}
+	} else {
+		Write-Host ""
+		Write-Host "ERROR: Configuration file is missing, empty, or undefined."
+		Write-Host "Verify that the specified -cfg flag's filepath is correct and readable."
+		Write-Host "Exiting..."
+		exit
+	}
+	Write-Host ""
+}
+
+function Validate-Cfg {
+	Write-Host ""
+	#check sas config dir
+	if (Test-Path -Path $sasconfigpath) {
+		Write-Host "SAS Configuration Directory exists."
+		Write-Host "SAS Configuation Directory path: $sasconfigpath."
+    } else {
+		Write-Host "ERROR: SAS Configuration Directory could not be accessed."
+		Write-Host "SAS Configuation Directory path: $sasconfigpath."
+    }
+	
+	#check user cfg file contents
+	if ($cfg.Length -gt 0) {
+		Write-Host ""
+		Write-Host "Configuration file exists."
+		Write-Host "Listing contents read from configuration file $cfg :"
+		Write-Host ""
+		$vcount=1
+		$validatearray = Get-Content -Path $cfg
+		$validatearray | ForEach-Object {
+				Write-Host "$vcount) $_"
+				$vcount++
+			}
+		Write-Host ""
+		Write-Host "End list of configuration file contents. Verify all expected services appeared above!"
+		}
+	else {
+		Write-Host ""
+		Write-Host "ERROR: Configuration file is missing, empty, or undefined."
+		Write-Host "Verify that the specified -cfg flag's filepath is correct and readable."
+	}
+}
+	
 
 function Check-WebAppServer-Ready($servicename){ #call function using $_ to send the name of the service we are calling
 
-$sasconfigpath = "D:\SAS\Config\Lev1\" #DEFINE-VARIABLE: SAS Configuration Path, including Lev#, in quotes. Example: "D:\SAS\Config\Lev1\"
 $webappsvrname =  $servicename | Where {$servicename -match '\b(SASServer\d+_\d+)\b'} | Foreach {$Matches[1]} #strange but functional command... split servicename into just webappserver name, such as SASServer1_1, using regex match looking for SASServer<digits>_<digits>
 
 
@@ -174,7 +228,9 @@ else {
 }
 
 #same as laststop but for initialization message (printed when the server starts loading its webapps)
-$lastinit = Select-String -Path "$sasconfigpath\Web\WebAppServer\$webappsvrname\logs\server.log" -Pattern 'Initialization processed' | select-object -ExpandProperty LineNumber
+#message changes depending on hotfix level... old is 'Initialization processed' , new is 'Server initialization'
+#if lastinit never finds a match, probably still on old version and need to change the string after -Pattern below to use the old syntax as shown above
+$lastinit = Select-String -Path "$sasconfigpath\Web\WebAppServer\$webappsvrname\logs\server.log" -Pattern 'Server initialization' | select-object -ExpandProperty LineNumber
 if ($null -eq $lastinit) {
 	$lastinit=0
 }
@@ -214,16 +270,25 @@ if ($finishedstart -ne 1) {
             }
 }
 
+
 If ( $action -eq 'stop' ) {
-    Stop-SAS
+    Check-Input
+	Stop-SAS
 }
 ElseIf ( $action -eq 'start' ) {
-    Start-SAS
+    Check-Input
+	Start-SAS
 }
 ElseIf ($action -eq 'status') {
     Get-SAS
 }
+ElseIf ($action -eq 'validate') {
+    Validate-Cfg
+}
+ElseIf ($action -eq 'search') {
+Search-SAS-IBM
+}
 Else {
-    Write-Host "Acceptable actions are 'start', 'status' and 'stop'."
+    Write-Host "Acceptable actions are 'search', 'start', 'status', 'stop', and 'validate'."
     exit
 }
