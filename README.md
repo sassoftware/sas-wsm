@@ -6,11 +6,12 @@ The SAS-wsm utility provides consistent management of SAS-related services for W
 
 ### What's New
 
-SAS-wsm 1.0 initial release:
+SAS-wsm 1.1 initial release:
 
-* Define start and stop order for Windows services
-* Allow user to check status of SAS services from local machine (as well as start/stop them)
-* Enable validation of WebAppServer startup including deployment of actual WebApps in startup time
+* Change to external configuration file for service definitions
+* Provide new setup validation functions via 'search' and 'validate' actions
+* Updates to improve status action reporting output
+* Move default WebAppServer messaging to expectations from newer hotfix levels
 
 ### Prerequisites
 
@@ -18,11 +19,7 @@ SAS-wsm 1.0 initial release:
 
 ### Installation
 
-Download script and store in a location where it can be accessed. Open the script and set required values:
-
-1) Define SAS services to stop. In the function Stop-SAS, set a list of Windows Services you wish to control, following the tag #DEFINE-VARIABLE.
-2) Define SAS services to start. In the function Start-SAS, set a list of Windows Services you wish to control, following the tag #DEFINE-VARIABLE.
-3) Define the location of the SAS Configuration Directory. In the function Check-WebAppServer-Ready, set this location on the line tagged #DEFINE-VARIABLE.
+Download script and store in a location where it can be accessed. Modify the user-variables section at the top of the script to set the correct SAS Configuration Directory path for your environment. Create a configuration file defining the SAS services you wish to control.
 
 Detailed setup documentation is provided in the file **SAS-wsmConfigurationGuide.pdf**.
 
@@ -32,16 +29,18 @@ Navigate to where the script is stored, then execute it.
 
 Provide the following inputs as shown:
 
-.\SAS-wsm.ps1 -servername \<FQDN of server host\> -action \<start|stop|status\>
+.\SAS-wsm.ps1 -action \<start|stop|status|search|validate\> -cfg \<configuration-file-path\>
 
 
 ### Examples
 
-* Start services: `.\SAS-wsm.ps1 -servername myserver.sas.com -action start`
+* Start services: `.\SAS-wsm.ps1 -action start -cfg example-servers.cfg`
 
-* Stop services: `.\SAS-wsm.ps1 -servername myserver.sas.com -action stop`
+* Stop services: `.\SAS-wsm.ps1 -action stop -cfg example-servers.cfg`
 
-* Check service status: `.\SAS-wsm.ps1 -servername myserver.sas.com -action status`
+* Check service status: `.\SAS-wsm.ps1 -action status -cfg example-servers.cfg`
+
+More examples are provided in the file **SAS-wsmConfigurationGuide.pdf**.
 
 ## Contributing
 
