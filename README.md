@@ -6,12 +6,13 @@ The SAS-wsm utility provides consistent management of SAS-related services for W
 
 ### What's New
 
-SAS-wsm 1.1 initial release:
+SAS-wsm 2.0 initial release:
 
-* Change to external configuration file for service definitions
-* Provide new setup validation functions via 'search' and 'validate' actions
-* Updates to improve status action reporting output
-* Move default WebAppServer messaging to expectations from newer hotfix levels
+* Default automatic configuration - environment-specific setup definition of start/stop services and control order no longer required
+* Automatic SASConfig directory locator - uses properties of various Windows Services to determine SASConfig path. Manual override available.
+* Partial service stack control - ability to stop a subset of services using a custom service configuration file. This feature also allows to retain legacy v.1.1 cfgfile compatibility.
+* Environment-specific settings now fully externalized from base .ps1 script
+* v.1.1 configfile validation functionality action removed (use status action to test a custom service configuration file)
 
 ### Prerequisites
 
@@ -19,28 +20,27 @@ SAS-wsm 1.1 initial release:
 
 ### Installation
 
-Download script and store in a location where it can be accessed. Modify the user-variables section at the top of the script to set the correct SAS Configuration Directory path for your environment. Create a configuration file defining the SAS services you wish to control.
+Download script and store in a location where it can be accessed. No modifications are required to run the script in base configuration (full start/stop of SAS services in the environment). Simply run script as the SAS Installation User (user who owns SAS deployment files).
 
-Detailed setup documentation is provided in the file **SAS-wsmConfigurationGuide.pdf**.
+Refer to setup documentation for details on advanced configuration options.
 
 ### Running
 
 Navigate to where the script is stored, then execute it.
 
-Provide the following inputs as shown:
+Provide the following input parameters as shown:
 
-.\SAS-wsm.ps1 -action \<start|stop|status|search|validate\> -cfg \<configuration-file-path\>
+.\SAS-wsm.ps1 -action \<start|stop|status\>
 
+Additional input parameters are available for optional/extended functionality. Refer to setup documentation for details.
 
 ### Examples
 
-* Start services: `.\SAS-wsm.ps1 -action start -cfg example-servers.cfg`
+* Start services: `.\SAS-wsm.ps1 -action start`
 
-* Stop services: `.\SAS-wsm.ps1 -action stop -cfg example-servers.cfg`
+* Stop services: `.\SAS-wsm.ps1 -action stop`
 
-* Check service status: `.\SAS-wsm.ps1 -action status -cfg example-servers.cfg`
-
-More examples are provided in the file **SAS-wsmConfigurationGuide.pdf**.
+* Check service status: `.\SAS-wsm.ps1 -action status`
 
 ## Contributing
 
