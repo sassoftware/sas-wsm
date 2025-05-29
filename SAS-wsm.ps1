@@ -12,6 +12,7 @@
 # 1.0.1 - 22 August 2022. Add check on null arrays during webappserver log reading due to rolled logs.
 # 1.1.0 - 15 September 2022. Change to external cfg file for service definitions. Add search, input checking and validation functions. Code revisions to support cfg file, etc.
 # 2.0.0 - 12 July 2023. Major revisions/rewrite. Merge with auto-setup start/stop script. Add supporting functions and parameters. Retain external cfg as optional support. Remove external cfg tester action.
+# 2.1.0 - 29 May 2025. Added detailed audit logging
 
 ### GET USER INPUTS
 # Get user-specified action as input
@@ -20,9 +21,52 @@
 # $cfg = Custom startup order configuration file. Default order is defined in this file and will be used if not specified.
 param([Parameter(Mandatory=$true)]$action,$saslev,$cfg)
 
+### AUDIT LOGGING SETUP
+# Initialize log file in same directory as script
+$script:LogPath = Join-Path -Path $PSScriptRoot -ChildPath "SAS-wsm_$(Get-Date -Format 'yyyyMMdd').log"
+$script:SessionId = [guid]::NewGuid().ToString().Substring(0,8)
+
+# Logging function
+FUNCTION Write-AuditLog {
+    param(
+        [string]$Level = "INFO",
+        [string]$Message,
+        [string]$ServiceName = "",
+        [string]$Action = "",
+        [string]$Status = ""
+    )
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
+    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $hostname = $env:COMPUTERNAME
+    
+    # Build log entry
+    $logEntry = "[$timestamp] [$Level] [Session:$script:SessionId] [User:$user] [Host:$hostname]"
+    
+    if ($ServiceName) { $logEntry += " [Service:$ServiceName]" }
+    if ($Action) { $logEntry += " [Action:$Action]" }
+    if ($Status) { $logEntry += " [Status:$Status]" }
+    
+    $logEntry += " $Message"
+    
+    # Write to log file
+    try {
+        Add-Content -Path $script:LogPath -Value $logEntry -ErrorAction Stop
+    }
+    catch {
+        # If we can't write to log, at least output to console
+        Write-Host "LOGGING ERROR: $_"
+    }
+}
+
+# Log script startup
+Write-AuditLog -Level "INFO" -Message "SAS-wsm script started" -Action $action
+Write-AuditLog -Level "INFO" -Message "Parameters: action=$action, saslev=$saslev, cfg=$cfg"
+
 
 #  define main function used to stop / start.  (called at end of script). 
 FUNCTION STOPSTART-SASSERVICE ($action,$service,$waitforstate){
+	Write-AuditLog -Level "INFO" -Message "Processing service" -ServiceName $service.DisplayName -Action $action -Status $service.status
 	$timeoutSeconds=300 #5 minutes timeout
 	$serviceWaitTimeout = New-Object Timespan 0,0,$timeoutSeconds #define object to reference max allowed wait time (in seconds) for Windows to recieve notification that service completed action. This normally takes only a few seconds.
     Write-Host "`n"
@@ -33,24 +77,29 @@ FUNCTION STOPSTART-SASSERVICE ($action,$service,$waitforstate){
         Write-Host "attempting to $action --  " $service.DisplayName
         Write-Output '-------------------------------------'
         If ($action -eq "stop"){
+            Write-AuditLog -Level "INFO" -Message "Attempting to stop service" -ServiceName $service.DisplayName
             Stop-Service -InputObject $service -WarningAction SilentlyContinue -ErrorAction Stop -NoWait #because -NoWait, will not hold here for Windows to report stopped. Check for actually stopped happens from $service.WaitForStatus
         }
         ElseIf ($action -eq "start"){
+            Write-AuditLog -Level "INFO" -Message "Attempting to start service" -ServiceName $service.DisplayName
 			Start-Service -InputObject $service -WarningAction SilentlyContinue -ErrorAction Stop #the -NoWait parameter is not available on START operation. If Windows hangs on starting the service, this will too. Can start as background job to avoid this but has major complexity in passing $service object.
         }        
         start-sleep -s 3
 		Try {
 			$service.WaitForStatus($waitforstate, $serviceWaitTimeout) #await service to report desired status $waitforstate (stop, if we are stopping), or time out after $serviceWaitTimeout timespan object is exceeded. This is equal to $timeoutSeconds seconds
 			Write-Host $service.DisplayName "status is:-- " $service.status
+			Write-AuditLog -Level "INFO" -Message "Service action completed successfully" -ServiceName $service.DisplayName -Action $action -Status $service.status
 			Write-Host "`n"
 		}
 		Catch {
+			Write-AuditLog -Level "ERROR" -Message "Service failed to reach $waitforstate state within $timeoutSeconds seconds" -ServiceName $service.DisplayName -Action $action
 			throw "ERROR: $action terminated due to $($service.DisplayName) failed to report $waitforstate within $timeoutSeconds seconds."
 			#Exit 1 terminate inherent from throw
 		}
     }
     else {
         Write-Host "skipping $action action because service is already $waitforstate"
+        Write-AuditLog -Level "INFO" -Message "Skipping service - already in desired state" -ServiceName $service.DisplayName -Action $action -Status $waitforstate
         Write-Output '-------------------------------------'
     }
     start-sleep -s 1
@@ -58,6 +107,7 @@ FUNCTION STOPSTART-SASSERVICE ($action,$service,$waitforstate){
 
 FUNCTION CHECK-WEBAPPSERVER-READY($servicename){
 	# wait for webappservers to finish deploying webapps before considering them truly started
+	Write-AuditLog -Level "INFO" -Message "Checking WebAppServer deployment status" -ServiceName $servicename
 
 	If ($script:sasconfigpath.length -gt 0) {
 		$webappsvrname =  $servicename | Where {$servicename -match '\b(SASServer\d+_\d+)\b'} | Foreach {$Matches[1]} #strange but functional command... split servicename into just webappserver name, such as SASServer1_1, using regex match looking for SASServer<digits>_<digits>
@@ -99,12 +149,14 @@ FUNCTION CHECK-WEBAPPSERVER-READY($servicename){
 
 			if ($laststop -gt $lastinit){
 				#if newest thing in log is stop, there was a problem
+				Write-AuditLog -Level "ERROR" -Message "Server initialization does not appear to have started" -ServiceName $servicename
 				write-host("ERROR: Server initialization does not appear to have started. Verify Web Application Server $webappsvrname is running.")
 				Exit 1
 			}
 			elseif($laststart -gt $lastinit){
 				#if newest thing in log is startup complete, the webappserver is ready
 			   write-host("INFO: $webappsvrname startup detected.")
+			   Write-AuditLog -Level "INFO" -Message "WebAppServer startup completed" -ServiceName $servicename
 			   $finishedstart=1;
 			   Continue
 			}
@@ -117,6 +169,7 @@ FUNCTION CHECK-WEBAPPSERVER-READY($servicename){
 		}
 		while (($finishedstart -ne 1) -and ( $startchecks -le 30))
 			if ($finishedstart -ne 1) {
+					Write-AuditLog -Level "WARN" -Message "WebAppServer startup timeout - may still be deploying" -ServiceName $servicename
 					Write-Host ("WARN: Web Application Server $webappsvrname has still not completed startup operations. Some Web Applications may still be unavailable until the WebAppServer has fully completed startup.")
 			}
 	}
@@ -140,15 +193,18 @@ FUNCTION DETERMINE-SASCONFIG-DIR ($potentialcfgsvc) {
 		#METADATA SERVER. Regex match that takes anything after literal `-config "` and ending on `Lev#`, where # is any single numerical digit. This should result in, for example, C:\SAS\Config\Lev1 , from where the sasv9.cfg is specified in command.
 			$script:sasconfigpath=$cfgpathobj -match '(?<=-config ").*?Lev\d' | Foreach {$matches[0]}
 			Write-Host "INFO: Successfully determined the SAS Configuration Directory path: $script:sasconfigpath"
+			Write-AuditLog -Level "INFO" -Message "Determined SAS Configuration Directory: $script:sasconfigpath" -ServiceName $potentialcfgsvc
 	}
 	ElseIf ($cfgpathobj -match '\b.*?Lev\d') {
 		#JMS BROKER AND/OR CACHE LOCATOR. Regex match that takes from beginning of word until `Lev#`. This match functions on both services, where the beginning of the PathName is the SASConfig dir. Note this actually returns multiple matches, take the first one (later ones have prepended junk)
 			$script:sasconfigpath=$cfgpathobj -match '^.*?Lev\d' | Foreach {$matches[0]}
 			Write-Host "INFO: Successfully determined the SAS Configuration Directory path: $script:sasconfigpath"
+			Write-AuditLog -Level "INFO" -Message "Determined SAS Configuration Directory: $script:sasconfigpath" -ServiceName $potentialcfgsvc
 	}
 	Else {
 		Write-Host "WARN: Failed to locate using SAS Configuration Directory."
 		Write-Host "WARN: If this message appears for every attempted service, please specify it manually in your command using -cfg option."
+		Write-AuditLog -Level "WARN" -Message "Failed to determine SAS Configuration Directory" -ServiceName $potentialcfgsvc
 	}
 }
 
@@ -158,9 +214,11 @@ If ($saslev) {
 	If (Test-Path -Path $saslev\ConfigData\status.xml -PathType leaf) { #status.xml is used by other SAS deployment services and thus should always be in this relative path under sasconfig dir
 		$script:sasconfigpath="$saslev" #set the user input to script-scope var used elsewhere
 		Write-Host "INFO: Verified SAS Configuration Directory path, using $script:sasconfigpath for this run."
+		Write-AuditLog -Level "INFO" -Message "User specified SAS Configuration Directory verified: $script:sasconfigpath"
 	}
 	Else {
 		# If the status.xml file does not exist under provided sasconfigdir path, probably not actually a sasconfig dir
+		Write-AuditLog -Level "ERROR" -Message "Invalid SAS Configuration Directory specified: $saslev"
 		Write-Host "ERROR: Unable to determine if provided folder path contains a SAS Configuration Directory."
 		Write-Host "ERROR: Verify that the provided path is correct and includes the LevN."
 		Write-Host "ERROR: Example: C:\SAS\Config\Lev1"
@@ -182,10 +240,12 @@ If ($cfg) {
 		$StaticStartOrder=@()
 		[string[]]$StaticStartOrder = Get-Content -Path "$cfg" #inherent for loop; read each line of $cfg file and load into array $StaticStartOrder as string
 		Write-Host "NOTE: Loaded custom startup order from file $cfg"
+		Write-AuditLog -Level "INFO" -Message "Loaded custom startup order from file: $cfg"
 		$script:UserOrder=1 #set flag to mark this run as using custom user-specified order file (affects matching logic to avoid user-specified file being forced to adhere to regex literal cleansing)
 		$StaticStartOrder
 	}
 	Else {
+		Write-AuditLog -Level "ERROR" -Message "Custom startup order file not found: $cfg"
 		Write-Host "ERROR: A custom startup order file was set but the file could not be read. Verify path and permissions."
 		Exit 1
 	}
@@ -237,6 +297,7 @@ $GetSASServices = Get-Service |
     where-object {$_.displayname -Match "^SAS*|^IBM Spectrum"-and
     ($_.starttype -NE 'Disabled' -or 
      $_.status -EQ 'running') }
+Write-AuditLog -Level "INFO" -Message "Found $($GetSASServices.Count) SAS services on this system"
 
 # ---- add each service in $GetSASServices into order into $startorder ----
 $startorder=@()
@@ -318,32 +379,39 @@ foreach($DefinedService in $StaticStartOrder) { #"outer loop" -> check each obje
 	
 	
 }
+Write-AuditLog -Level "INFO" -Message "Service startup order determined - $($StartOrder.Count) services will be processed"
 
 # setup variables needed by custom function, "StopStart-SASService"  
 If ($action -eq "stop"){
     $waitforstate='stopped'
     $services=$StartOrder[$StartOrder.count..0] #reverse startup order
+    Write-AuditLog -Level "INFO" -Message "Preparing to stop services in reverse order"
     }
 ElseIf ($action -eq "start"){
     $waitforstate='running'
     $services=$StartOrder
+    Write-AuditLog -Level "INFO" -Message "Preparing to start services in defined order"
     }
 ElseIf ($action -eq "status"){
 	$services=$StartOrder
+	Write-AuditLog -Level "INFO" -Message "Checking status of all services"
 	}
 Else {
+    Write-AuditLog -Level "ERROR" -Message "Unknown action specified: $action"
     Write-Host -ForegroundColor Red "ERROR: Unknown command defined as action. Valid actions: start , stop , status"
     Exit 1
 }
 
 # --- Main Action in Script --- 
 # Loop over the function for each service to stop or start 
+Write-AuditLog -Level "INFO" -Message "Starting main action loop for $($services.Count) services"
 TRY
 {
 	If ($action -eq "status"){
 		Write-Host "`n"
 		Write-Host -ForegroundColor Green "Current Status of SAS services:"
 		$services | Format-Table -Property Status, Displayname -AutoSize
+		Write-AuditLog -Level "INFO" -Message "Status check completed for $($services.Count) services"
 	}
 	Else {
     Write-Output '-------------------------------------'
@@ -387,11 +455,16 @@ TRY
     Write-Host -ForegroundColor Green " Script Finished - Current Status of SAS services in order they were $waitforstate :"
     Write-Output '-------------------------------------'
     $services | Format-Table -Property Status, Displayname -AutoSize
+    Write-AuditLog -Level "INFO" -Message "Script completed successfully - all services processed"
 	}
 }
 CATCH
 {
     Write-Output "An error has occurred. Printing latest error to console:"
 	Write-Host -ForegroundColor Red "$($Error[0])"
+	Write-AuditLog -Level "ERROR" -Message "Script error: $($Error[0])"
 	#Write-Host -ForegroundColor Red "$Error" #DEBUG . Print entire ps error log array, will shows repeats of errors if run multiple times.
-}    
+}
+
+# Log script completion
+Write-AuditLog -Level "INFO" -Message "SAS-wsm script ended"
