@@ -12,6 +12,7 @@
 # 1.0.1 - 22 August 2022. Add check on null arrays during webappserver log reading due to rolled logs.
 # 1.1.0 - 15 September 2022. Change to external cfg file for service definitions. Add search, input checking and validation functions. Code revisions to support cfg file, etc.
 # 2.0.0 - 12 July 2023. Major revisions/rewrite. Merge with auto-setup start/stop script. Add supporting functions and parameters. Retain external cfg as optional support. Remove external cfg tester action.
+# 2.1.0 - 29 May 2025. Added detailed logging
 
 ### GET USER INPUTS
 # Get user-specified action as input
