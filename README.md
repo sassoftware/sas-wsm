@@ -6,13 +6,11 @@ The SAS-wsm utility provides consistent management of SAS-related services for W
 
 ### What's New
 
-SAS-wsm 2.0 initial release:
+SAS-wsm 2.0.1 release:
 
-* Default automatic configuration - environment-specific setup definition of start/stop services and control order no longer required
-* Automatic SASConfig directory locator - uses properties of various Windows Services to determine SASConfig path. Manual override available.
-* Partial service stack control - ability to stop a subset of services using a custom service configuration file. This feature also allows to retain legacy v.1.1 cfgfile compatibility.
-* Environment-specific settings now fully externalized from base .ps1 script
-* v.1.1 configfile validation functionality action removed (use status action to test a custom service configuration file)
+* SAS-wsm project has been un-archived
+* SAS-wsm was tested and validated to confirm operations on modern SAS 9.4 maintenace releases (latest version tested: SAS 9.4 Maintenance Release 9)
+* Minor revisions to default startup order (improves startup automation of critical services in environments where some non-critical services may be unable to start)
 
 ### Prerequisites
 
