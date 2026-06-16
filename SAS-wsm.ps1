@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # SAS-wsm: Script to Start/Stop Windows Services and validate MidTier Readiness
-# Version: 2.0.0
+# Version: 2.0.1
 # Author: Andy Foreman
 # Much of the baseline code derived from previous work by Greg Wootton on 20AUG2020
 # Special thanks to John Maxwell for auto-setup start/stop concept implemented in 2.0.0 on 12JUL2023.
@@ -13,6 +13,10 @@
 # 1.1.0 - 15 September 2022. Change to external cfg file for service definitions. Add search, input checking and validation functions. Code revisions to support cfg file, etc.
 # 2.0.0 - 12 July 2023. Major revisions/rewrite. Merge with auto-setup start/stop script. Add supporting functions and parameters. Retain external cfg as optional support. Remove external cfg tester action.
 # 2.1.0 - 29 May 2025. Added detailed audit logging
+# 2.0.1 - 16 June 2026. Un-archive project. Confirm operations on modern SAS 9.4 maintenance releases. Adjust default startup order to improve startup success of critical services (i.e. when some non-critical services are non-operational).
+
+### TODOS
+# Implement "skip" function to permit a user to ignore the state/status/control-failure of a specific service
 
 ### GET USER INPUTS
 # Get user-specified action as input
@@ -261,10 +265,7 @@ Else {
 		".*Web Infrastructure Platform Data Server",
 		".*DataServer",
 		".*Data Server",
-		".*OLAP Server",
 		".*object spawner",
-		".*SHARE server",
-		".*CONNECT spawner",
 	   #".*Deployment Tester server", #typically not started unless testing your deployment
 		".*JobRunner", #Distributed In-Process Scheduler Job Runner
 		".*Launcher"
@@ -284,7 +285,10 @@ Else {
 		".*LSF Process Manager",
 		".*LSF LIM",
 		".*LSF RES",
-		".*LSF SBD"
+		".*LSF SBD",
+		".*SHARE server",
+		".*CONNECT spawner",
+		".*OLAP Server"
 		#,".*" #start everything -- will launch anything that $GetSASServices locates, even if not defined in this list. Also means things in this list but commented out will be launched. Can be useful for setup, but recommend defining actual names for regular use.
 		)
 
