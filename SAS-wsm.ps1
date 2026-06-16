@@ -13,10 +13,11 @@
 # 1.1.0 - 15 September 2022. Change to external cfg file for service definitions. Add search, input checking and validation functions. Code revisions to support cfg file, etc.
 # 2.0.0 - 12 July 2023. Major revisions/rewrite. Merge with auto-setup start/stop script. Add supporting functions and parameters. Retain external cfg as optional support. Remove external cfg tester action.
 # 2.1.0 - 29 May 2025. Added detailed audit logging
-# 2.0.1 - 16 June 2026. Un-archive project. Confirm operations on modern SAS 9.4 maintenance releases. Adjust default startup order to improve startup success of critical services (i.e. when some non-critical services are non-operational).
+# 2.1.1 - 16 June 2026. Un-archive project. Merge v.2.1.0 / PR #4 audit logging contributions into main branch. Confirm operations on modern SAS 9.4 maintenance releases. Adjust default startup order to improve startup success of critical services (i.e. when some non-critical services are non-operational).
 
 ### TODOS
 # Implement "skip" function to permit a user to ignore the state/status/control-failure of a specific service
+# Document and improve audit logging file-creation definition parameters
 
 ### GET USER INPUTS
 # Get user-specified action as input

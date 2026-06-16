@@ -6,8 +6,9 @@ The SAS-wsm utility provides consistent management of SAS-related services for W
 
 ### What's New
 
-SAS-wsm 2.0.1 release:
+SAS-wsm 2.1.1 release:
 
+* Merge audit-logging function contributed by Dustin Polk (PR #4)
 * SAS-wsm project has been un-archived
 * SAS-wsm was tested and validated to confirm operations on modern SAS 9.4 maintenace releases (latest version tested: SAS 9.4 Maintenance Release 9)
 * Minor revisions to default startup order (improves startup automation of critical services in environments where some non-critical services may be unable to start)
